@@ -1,26 +1,22 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool, create_engine
 from alembic import context
 import os
 import sys
 from dotenv import load_dotenv
 
-# ── Make sure app/ is importable ──────────────────────────────────────────────
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 load_dotenv()
+config = context.config
+config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL"))
 
-# ── Alembic Config object ─────────────────────────────────────────────────────
 config = context.config
 
-# ── Override sqlalchemy.url from .env ────────────────────────────────────────
-from sqlalchemy import engine_from_config, pool, create_engine
-
-# ── Logging ───────────────────────────────────────────────────────────────────
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# ── Import ALL models so Alembic can see them ─────────────────────────────────
+# Import all models
 from app.database import Base
 from app.models.user import User, Address
 from app.models.product import Category, Product
@@ -29,11 +25,16 @@ from app.models.order import Order, OrderItem
 
 target_metadata = Base.metadata
 
-# ── Run migrations ────────────────────────────────────────────────────────────
+# Read URL directly from .env — bypasses configparser % issue
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "mysql+pymysql://root:yourpassword@localhost:3306/ecommerce_db"
+)
+
+
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -43,11 +44,9 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Create engine directly instead of via config (avoids % interpolation bug)
+    connectable = create_engine(DATABASE_URL, poolclass=pool.NullPool)
+
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
